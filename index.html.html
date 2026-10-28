@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>投資晨報</title>
+<style>
+:root{--bg:#0b0d10;--card:#14181d;--bd:#232a33;--tx:#e8ecf1;--mu:#8a96a6;--ac:#10a37f;--up:#ef4444;--dn:#22c55e}
+:root[data-t=light]{--bg:#f6f7f9;--card:#fff;--bd:#e3e6ea;--tx:#14181d;--mu:#667085}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.6 -apple-system,"Noto Sans TC","PingFang TC",sans-serif}
+.w{max-width:960px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 10px}
+.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.mu{color:var(--mu);font-size:12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-top:12px}
+.g{display:grid;gap:12px}@media(min-width:760px){.g2{grid-template-columns:1fr 1fr}}
+button,input{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:9px 14px}
+button{cursor:pointer;min-height:40px}button.p{background:var(--ac);border-color:var(--ac);color:#fff}
+.tabs{display:flex;gap:6px;margin-top:12px}.tabs button.on{border-color:var(--ac);color:var(--ac)}
+.row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--bd);flex-wrap:wrap}
+.row:first-of-type{border-top:0}
+.up{color:var(--up)}.dn{color:var(--dn)}.fl{color:var(--mu)}
+.tag{font-size:11px;border:1px solid var(--bd);border-radius:6px;padding:1px 6px;color:var(--mu)}
+.err{color:#f59e0b}a{color:var(--ac)}
+.det{background:var(--bg);border-radius:10px;padding:10px;margin-top:8px}
+label{display:block;padding:4px 0}
+</style></head><body><div class="w" id="app"></div>
+<script>
+const API='https://openapi.twse.com.tw/v1/';
+const DEF={theme:'dark',color:'tw',watch:['2330','2317'],links:[],sec:{taiex:1,watch:1,news:1,risk:1}};
+let S=Object.assign({},DEF,JSON.parse(localStorage.getItem('tm')||'{}'));
+let D={},tab='home',open=null,status='尚未更新',last='';
+const save=()=>localStorage.setItem('tm',JSON.stringify(S));
+const $=s=>document.getElementById(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num=v=>parseFloat(String(v??'').replace(/,/g,''));
+const roc=s=>{s=String(s||'');return s.length>=7?`${+s.slice(0,3)+1911}-${s.slice(3,5)}-${s.slice(5,7)}`:s.length==5?`${+s.slice(0,3)+1911}年${s.slice(3,5)}月`:s||'—'};
+function cls(v){const u=S.color=='tw'?['up','dn']:['dn','up'];return v>0?u[0]:v<0?u[1]:'fl'}
+const arrow=v=>v>0?'▲':v<0?'▼':'—';
+function chg(c,p){return `<span class="${cls(c)}">${arrow(c)} ${c>0?'+':''}${c.toFixed(2)} (${p>0?'+':''}${p.toFixed(2)}%)</span>`}
+async function get(name,path){try{const r=await fetch(API+path);if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(!Array.isArray(j)||!j.length)throw Error('回傳空資料');D[name]={ok:1,data:j,t:new Date().toLocaleString('zh-TW')}}catch(e){D[name]={ok:0,err:e.message,t:D[name]?.t}}}
+async function refresh(){
+ status='更新中…';draw();
+ await Promise.all([get('fm','exchangeReport/FMTQIK'),get('px','exchangeReport/STOCK_DAY_ALL'),get('rev','opendata/t187ap05_L'),get('ann','opendata/t187ap04_L')]);
+ const bad=['fm','px','rev','ann'].filter(k=>!D[k].ok).length;
+ last=new Date().toLocaleString('zh-TW');
+ status=bad==0?'更新完成':bad==4?'全部無法取得（可能是網路或瀏覽器限制）':`部分資料無法取得（${bad}/4）`;draw();
+}
+const fail=k=>D[k]&&!D[k].ok?`<div class="err">目前無法取得：${esc(D[k].err)}</div>`:'';
+const src=(n,u,d)=>`<div class="mu">來源：<a href="${u}" target="_blank" rel="noopener">${n}</a>｜所屬日期：${d||'—'}｜取得時間：${D[n==='證交所 FMTQIK'?'fm':'px']?.t||'—'}</div>`;
+function px(code){const r=D.px?.ok&&D.px.data.find(x=>x.Code==code);if(!r)return null;const c=num(r.Change),cl=num(r.ClosingPrice);if(isNaN(cl))return null;const pv=cl-c;return{name:r.Name,cl,c,p:pv?c/pv*100:0,vol:r.TradeVolume}}
+function revOf(code){return D.rev?.ok&&D.rev.data.find(x=>x['公司代號']==code)}
+function annOf(code){return D.ann?.ok?D.ann.data.filter(x=>x['公司代號']==code).slice(0,5):[]}
+function secTaiex(){
+ let h='<h2>台股市場 <span class="tag">盤後資料</span></h2>'+fail('fm');
+ if(D.fm?.ok){const r=D.fm.data.at(-1),t=num(r.TAIEX),c=num(r.Change);
+ h+=`<div style="font-size:28px">${t.toLocaleString()}</div>${chg(c,c/(t-c)*100)}
+ <div class="mu">成交股數 ${num(r.TradeVolume).toLocaleString()}｜成交金額 ${num(r.TradeValue).toLocaleString()} 元（新台幣）</div>
+ <div class="mu">所屬交易日：${roc(r.Date)}（若在開盤前查看即為前一交易日收盤）｜漲跌幅由程式依收盤與漲跌點計算｜來源：<a href="https://openapi.twse.com.tw" target="_blank">證交所 OpenAPI</a>｜取得：${D.fm.t}</div>`}
+ else if(!D.fm)h+='<div class="mu">尚未更新，請按「產生今日晨報」。</div>';
+ return h}
+function secUS(){return '<h2>國際市場</h2><div class="err">尚未支援：美股指數需要額外授權的資料 API 與金鑰，第一版不顯示任何自行生成的數字。</div>'}
+function secWatch(){
+ let h='<h2>自選股概覽</h2>';if(!S.watch.length)return h+'<div class="mu">尚未新增自選股。</div>';
+ h+=fail('px');
+ S.watch.forEach(c=>{const p=px(c),rv=revOf(c),an=annOf(c);
+ h+=`<div class="row" style="cursor:pointer" onclick="open_='${c}';toggle('${c}')"><div><b>${p?esc(p.name):'—'}</b> <span class="mu">${c} 上市</span> ${rv?'<span class="tag">有月營收</span>':''}${an.length?'<span class="tag">有公告</span>':''}</div><div>${p?p.cl.toLocaleString()+' 元 '+chg(p.c,p.p):'<span class="err">'+(D.px?.ok?'查無此代號（僅支援上市股票）':'尚無資料')+'</span>'}</div></div>`;
+ if(open==c)h+=detail(c,p,rv,an)});
+ return h+'<div class="mu">價格為盤後日資料（證交所 STOCK_DAY_ALL），點擊個股展開詳細。</div>'}
+function detail(c,p,rv,an){
+ let h='<div class="det"><b>月營收</b><br>';
+ h+=rv?`${roc(rv['資料年月'])}：${num(rv['營業收入-當月營收']).toLocaleString()} 千元（新台幣）｜月增 ${rv['營業收入-上月比較增減(%)']}%｜年增 ${rv['營業收入-去年同月增減(%)']}%<div class="mu">來源：證交所/公開資訊觀測站 OpenData t187ap05_L（上期資料，非必然為今日新公布）</div>`:'<span class="mu">無資料</span>';
+ h+='<br><b>最新重大訊息</b><br>';
+ h+=an.length?an.map(a=>`<div>• ${roc(a['發言日期'])} ${esc(a['發言時間']||'')} ${esc(a['主旨'])}</div>`).join('')+`<div class="mu">來源：OpenData t187ap04_L｜<a target="_blank" href="https://mops.twse.com.tw">公開資訊觀測站</a></div>`:'<span class="mu">近期無重大訊息或無法取得</span>';
+ h+=`<br><b>季財報（EPS、毛利率）</b><div class="mu">尚未支援</div><b>AI 研究摘要</b><div class="mu">尚未啟用（見設定頁）</div></div>`;return h}
+window.toggle=c=>{open=open==c?null:c;draw()};
+function highlights(){
+ const L=[];
+ if(D.fm?.ok){const r=D.fm.data.at(-1),c=num(r.Change);L.push(['加權指數 '+(c>=0?'上漲':'下跌')+' '+Math.abs(c).toFixed(2)+' 點','最新交易日 '+roc(r.Date)+' 收 '+num(r.TAIEX).toLocaleString()])}
+ const ps=S.watch.map(c=>[c,px(c)]).filter(x=>x[1]).sort((a,b)=>Math.abs(b[1].p)-Math.abs(a[1].p));
+ if(ps[0])L.push([`自選股 ${ps[0][1].name} 波動最大`,`漲跌幅 ${ps[0][1].p.toFixed(2)}%`]);
+ const an=S.watch.reduce((n,c)=>n+annOf(c).length,0);if(an)L.push([`自選股有 ${an} 則近期重大訊息`,'點擊個股查看']);
+ return L.length?L.map(x=>`<div class="row"><div><b>${x[0]}</b><div class="mu">${x[1]}</div></div></div>`).join('')+'<div class="mu">以上為程式依已取得資料整理，非 AI 推論。</div>':'<div class="mu">資料不足，尚無法整理重點。</div>'}
+function risks(){
+ const L=[];S.watch.forEach(c=>{const r=revOf(c);if(r){const y=num(r['營業收入-去年同月增減(%)']);if(y<0)L.push(`${c} ${r['公司名稱']} 最新月營收年減 ${y}%，建議查看原始公告`)}});
+ return '<h2>風險與待確認事項</h2>'+(L.length?L.map(x=>`<div>• ${esc(x)}</div>`).join('')+'<div class="mu">依固定規則（營收年減）由程式產生。</div>':'<div class="mu">目前無觸發規則的項目。</div>')+'<div class="err" style="margin-top:6px">AI 摘要：尚未啟用。</div>'}
+function home(){
+ const d=new Date(),wd='日一二三四五六'[d.getDay()];
+ let h=`<div class="top"><div><h1>投資晨報</h1><div class="mu">${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${wd}｜最後更新：${last||'尚未更新'}</div><div class="mu">狀態：${status}</div></div><button class="p" onclick="refresh()">${last?'更新晨報':'產生今日晨報'}</button></div>`;
+ h+=`<div class="card"><h2>今日重點</h2>${highlights()}</div><div class="g g2">`;
+ if(S.sec.taiex)h+=`<div class="card">${secTaiex()}</div><div class="card">${secUS()}</div>`;
+ h+='</div>';
+ if(S.sec.watch)h+=`<div class="card">${secWatch()}</div>`;
+ if(S.sec.news)h+=`<div class="card"><h2>重要新聞與行事曆</h2><div class="err">尚未支援：新聞與行事曆需要授權的資料來源。</div></div>`;
+ if(S.sec.risk)h+=`<div class="card">${risks()}</div>`;
+ return h}
+function watchPage(){
+ return `<div class="card"><h2>自選股</h2><form onsubmit="event.preventDefault();addW()" style="display:flex;gap:8px"><input id="nc" placeholder="輸入代號或名稱，如 2330 或 台積電" style="flex:1"><button class="p">新增</button></form><div id="wm" class="err"></div>`+
+ S.watch.map((c,i)=>{const p=px(c);return `<div class="row"><div>${c} ${p?esc(p.name):''} <span class="tag">台股上市</span></div><div><button onclick="mv(${i},-1)">↑</button> <button onclick="mv(${i},1)">↓</button> <button onclick="S.watch.splice(${i},1);save();draw()">刪除</button></div></div>`}).join('')+'<div class="mu">美股與上櫃目前尚未支援。</div></div>'}
+function addW(){
+ const v=$('nc').value.trim();if(!v)return;
+ if(!D.px?.ok){$('wm').textContent='請先在首頁按「產生今日晨報」載入股票清單，才能查詢代號。';return}
+ const r=D.px.data.find(x=>x.Code==v||x.Name==v);
+ if(!r){$('wm').textContent='查不到「'+v+'」（僅支援證交所上市股票）。';return}
+ if(S.watch.includes(r.Code)){$('wm').textContent='已在清單中。';return}
+ S.watch.push(r.Code);save();draw()}
+window.mv=(i,d)=>{const j=i+d;if(j<0||j>=S.watch.length)return;[S.watch[i],S.watch[j]]=[S.watch[j],S.watch[i]];save();draw()};
+function settings(){
+ const st=[['台股大盤','已接真實資料','證交所 FMTQIK'],['自選股股價','已接真實資料','證交所 STOCK_DAY_ALL'],['月營收','已接真實資料','OpenData t187ap05_L'],['公司公告','已接真實資料','OpenData t187ap04_L'],['季財報','尚未支援',''],['美股/國際市場','尚未支援',''],['法人籌碼、技術面、除權息','尚未支援',''],['新聞、行事曆','尚未支援',''],['AI 摘要','尚未啟用','需後端與 API 金鑰']];
+ return `<div class="card"><h2>外觀</h2><button onclick="S.theme=S.theme=='dark'?'light':'dark';save();draw()">切換深／淺色</button> <button onclick="S.color=S.color=='tw'?'us':'tw';save();draw()">漲跌配色：${S.color=='tw'?'紅漲綠跌（台股）':'綠漲紅跌（美股）'}</button></div>
+ <div class="card"><h2>晨報區塊</h2>${[['taiex','大盤與國際市場'],['watch','自選股概覽'],['news','新聞與行事曆'],['risk','風險與待確認']].map(x=>`<label><input type="checkbox" ${S.sec[x[0]]?'checked':''} onchange="S.sec['${x[0]}']=this.checked?1:0;save()"> ${x[1]}</label>`).join('')}</div>
+ <div class="card"><h2>資料接通狀態</h2>${st.map(x=>`<div class="row"><div>${x[0]}</div><div class="${x[1]=='已接真實資料'?'':'err'}">${x[1]} <span class="mu">${x[2]}</span></div></div>`).join('')}</div>
+ <div class="card"><h2>快捷連結</h2><div class="mu">僅供點擊開啟，不會自動抓取內容。</div>${S.links.map((l,i)=>`<div class="row"><a href="${esc(l.u)}" target="_blank" rel="noopener">${esc(l.n)}</a><button onclick="S.links.splice(${i},1);save();draw()">刪除</button></div>`).join('')}
+ <form onsubmit="event.preventDefault();addL()" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input id="ln" placeholder="網站名稱"><input id="lu" placeholder="https://..."><button>新增</button></form></div>
+ <div class="card"><button onclick="if(confirm('確定重設所有設定與自選股？')){localStorage.removeItem('tm');location.reload()}">重設全部設定</button></div>`}
+function addL(){const n=$('ln').value.trim(),u=$('lu').value.trim();if(n&&/^https?:\/\//.test(u)){S.links.push({n,u});save();draw()}}
+function draw(){
+ document.documentElement.dataset.t=S.theme;
+ $('app').innerHTML=(tab=='home'?home():tab=='watch'?watchPage():settings()).replace(/^/,'')+'';
+ const t=document.createElement('div');t.className='tabs';
+ t.innerHTML=[['home','晨報'],['watch','自選股'],['set','設定']].map(x=>`<button class="${tab==x[0]?'on':''}" onclick="tab='${x[0]}';draw()">${x[1]}</button>`).join('');
+ $('app').insertBefore(t,$('app').firstChild);
+ $('app').insertAdjacentHTML('beforeend','<p class="mu">本工具僅整理公開資料，不構成投資建議。資料可能延遲或有誤，請以原始來源為準。</p>')}
+draw();
+</script></body></html>
