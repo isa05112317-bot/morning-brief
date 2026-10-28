@@ -40,12 +40,16 @@ function cls(v){const u=S.color=='tw'?['up','dn']:['dn','up'];return v>0?u[0]:v<
 const arrow=v=>v>0?'▲':v<0?'▼':'—';
 function chg(c,p){return `<span class="${cls(c)}">${arrow(c)} ${c>0?'+':''}${c.toFixed(2)} (${p>0?'+':''}${p.toFixed(2)}%)</span>`}
 async function get(name,path){try{const r=await fetch(api()+path);if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(!Array.isArray(j)||!j.length)throw Error('回傳空資料');D[name]={ok:1,data:j,t:new Date().toLocaleString('zh-TW')}}catch(e){D[name]={ok:0,err:e.message,t:D[name]?.t}}}
+async function getUS(){
+ if(!S.worker){D.us={ok:0,err:'需要資料轉接網址'};return}
+ try{const r=await fetch(S.worker.replace(/\/$/,'')+'/us');const j=await r.json();if(!r.ok)throw Error(j.error||'HTTP '+r.status);D.us={ok:1,data:j.series,t:new Date().toLocaleString('zh-TW')}}
+ catch(e){D.us={ok:0,err:e.message,t:D.us?.t}}}
 async function refresh(){
  status='更新中…';draw();
- await Promise.all([get('fm','exchangeReport/FMTQIK'),get('px','exchangeReport/STOCK_DAY_ALL'),get('rev','opendata/t187ap05_L'),get('ann','opendata/t187ap04_L')]);
- const bad=['fm','px','rev','ann'].filter(k=>!D[k].ok).length;
+ await Promise.all([get('fm','exchangeReport/FMTQIK'),get('px','exchangeReport/STOCK_DAY_ALL'),get('rev','opendata/t187ap05_L'),get('ann','opendata/t187ap04_L'),getUS()]);
+ const bad=['fm','px','rev','ann','us'].filter(k=>!D[k].ok).length;
  last=new Date().toLocaleString('zh-TW');
- status=bad==0?'更新完成':bad==4?'全部無法取得（可能是網路或瀏覽器限制）':`部分資料無法取得（${bad}/4）`;draw();
+ status=bad==0?'更新完成':bad==5?'全部無法取得（可能是網路或瀏覽器限制）':`部分資料無法取得（${bad}/5）`;draw();
 }
 const fail=k=>D[k]&&!D[k].ok?`<div class="err">目前無法取得：${esc(D[k].err)}</div>`:'';
 const src=(n,u,d)=>`<div class="mu">來源：<a href="${u}" target="_blank" rel="noopener">${n}</a>｜所屬日期：${d||'—'}｜取得時間：${D[n==='證交所 FMTQIK'?'fm':'px']?.t||'—'}</div>`;
@@ -60,7 +64,14 @@ function secTaiex(){
  <div class="mu">所屬交易日：${roc(r.Date)}（若在開盤前查看即為前一交易日收盤）｜漲跌幅由程式依收盤與漲跌點計算｜來源：<a href="https://openapi.twse.com.tw" target="_blank">證交所 OpenAPI</a>｜取得：${D.fm.t}</div>`}
  else if(!D.fm)h+='<div class="mu">尚未更新，請按「產生今日晨報」。</div>';
  return h}
-function secUS(){return '<h2>國際市場</h2><div class="err">尚未支援：美股指數需要額外授權的資料 API 與金鑰，第一版不顯示任何自行生成的數字。</div>'}
+function secUS(){
+ let h='<h2>國際市場 <span class="tag">美股・前一交易日</span></h2>'+fail('us');
+ if(D.us?.ok){D.us.data.forEach(x=>{const o=x.obs;if(!o.length){h+=`<div class="row"><div>${x.name}</div><div class="err">無資料</div></div>`;return}
+ const a=num(o[0].value),b=o[1]?num(o[1].value):NaN;
+ h+=`<div class="row"><div><b>${x.name}</b><div class="mu">${o[0].date}</div></div><div style="text-align:right">${a.toLocaleString()}<br>${isNaN(b)?'<span class="mu">無前一日資料</span>':chg(a-b,(a-b)/b*100)}</div></div>`});
+ h+=`<div class="mu">單位：指數點數｜漲跌幅由程式依相鄰兩個交易日收盤計算｜來源：<a href="https://fred.stlouisfed.org" target="_blank" rel="noopener">FRED（聖路易聯邦準備銀行）</a>｜取得：${D.us.t}｜可能落後實際收盤一個交易日</div>`}
+ else if(!D.us)h+='<div class="mu">尚未更新，請按「產生今日晨報」。</div>';
+ return h}
 function secWatch(){
  let h='<h2>自選股概覽</h2>';if(!S.watch.length)return h+'<div class="mu">尚未新增自選股。</div>';
  h+=fail('px');
@@ -78,6 +89,7 @@ window.toggle=c=>{open=open==c?null:c;draw()};
 function highlights(){
  const L=[];
  if(D.fm?.ok){const r=D.fm.data.at(-1),c=num(r.Change);L.push(['加權指數 '+(c>=0?'上漲':'下跌')+' '+Math.abs(c).toFixed(2)+' 點','最新交易日 '+roc(r.Date)+' 收 '+num(r.TAIEX).toLocaleString()])}
+ if(D.us?.ok){const x=D.us.data[0];if(x?.obs[1]){const a=num(x.obs[0].value),b=num(x.obs[1].value);L.push([`標普 500 ${a>=b?'上漲':'下跌'} ${Math.abs((a-b)/b*100).toFixed(2)}%`,'交易日 '+x.obs[0].date])}}
  const ps=S.watch.map(c=>[c,px(c)]).filter(x=>x[1]).sort((a,b)=>Math.abs(b[1].p)-Math.abs(a[1].p));
  if(ps[0])L.push([`自選股 ${ps[0][1].name} 波動最大`,`漲跌幅 ${ps[0][1].p.toFixed(2)}%`]);
  const an=S.watch.reduce((n,c)=>n+annOf(c).length,0);if(an)L.push([`自選股有 ${an} 則近期重大訊息`,'點擊個股查看']);
@@ -107,7 +119,7 @@ function addW(){
  S.watch.push(r.Code);save();draw()}
 window.mv=(i,d)=>{const j=i+d;if(j<0||j>=S.watch.length)return;[S.watch[i],S.watch[j]]=[S.watch[j],S.watch[i]];save();draw()};
 function settings(){
- const st=[['台股大盤','已接真實資料','證交所 FMTQIK'],['自選股股價','已接真實資料','證交所 STOCK_DAY_ALL'],['月營收','已接真實資料','OpenData t187ap05_L'],['公司公告','已接真實資料','OpenData t187ap04_L'],['季財報','尚未支援',''],['美股/國際市場','尚未支援',''],['法人籌碼、技術面、除權息','尚未支援',''],['新聞、行事曆','尚未支援',''],['AI 摘要',S.worker?'已連接 Worker':'尚未啟用','Worker＋Gemini 金鑰']];
+ const st=[['台股大盤','已接真實資料','證交所 FMTQIK'],['自選股股價','已接真實資料','證交所 STOCK_DAY_ALL'],['月營收','已接真實資料','OpenData t187ap05_L'],['公司公告','已接真實資料','OpenData t187ap04_L'],['季財報','尚未支援',''],['美股指數',D.us?.ok?'已接真實資料':'需設定 FRED 金鑰','FRED'],['法人籌碼、技術面、除權息','尚未支援',''],['新聞、行事曆','尚未支援',''],['AI 摘要',S.worker?'已連接 Worker':'尚未啟用','Worker＋Gemini 金鑰']];
  return `<div class="card"><h2>外觀</h2><button onclick="S.theme=S.theme=='dark'?'light':'dark';save();draw()">切換深／淺色</button> <button onclick="S.color=S.color=='tw'?'us':'tw';save();draw()">漲跌配色：${S.color=='tw'?'紅漲綠跌（台股）':'綠漲紅跌（美股）'}</button></div>
  <div class="card"><h2>晨報區塊</h2>${[['taiex','大盤與國際市場'],['watch','自選股概覽'],['news','新聞與行事曆'],['risk','風險與待確認']].map(x=>`<label><input type="checkbox" ${S.sec[x[0]]?'checked':''} onchange="S.sec['${x[0]}']=this.checked?1:0;save()"> ${x[1]}</label>`).join('')}</div>
  <div class="card"><h2>資料接通狀態</h2>${st.map(x=>`<div class="row"><div>${x[0]}</div><div class="${x[1]=='已接真實資料'?'':'err'}">${x[1]} <span class="mu">${x[2]}</span></div></div>`).join('')}</div>
@@ -122,7 +134,7 @@ async function askAI(){
  if(!S.worker){tab='set';draw();return}
  if(!D.fm?.ok&&!D.px?.ok){aiText='請先產生晨報取得資料。';draw();return}
  aiText='AI 整理中…';draw();
- const facts={taiex:D.fm?.ok?(()=>{const r=D.fm.data.at(-1);return{date:roc(r.Date),close:num(r.TAIEX),change:num(r.Change)}})():null,
+ const facts={us:D.us?.ok?D.us.data.map(x=>({name:x.name,date:x.obs[0]?.date,close:x.obs[0]&&num(x.obs[0].value),prev_close:x.obs[1]&&num(x.obs[1].value)})):null,taiex:D.fm?.ok?(()=>{const r=D.fm.data.at(-1);return{date:roc(r.Date),close:num(r.TAIEX),change:num(r.Change)}})():null,
  watch:S.watch.map(c=>{const p=px(c),rv=revOf(c);return{code:c,name:p?.name,close:p?.cl,change:p?.c,pct:p?+p.p.toFixed(2):null,revenue:rv?{month:roc(rv['資料年月']),mom_pct:rv['營業收入-上月比較增減(%)'],yoy_pct:rv['營業收入-去年同月增減(%)']}:null,announcements:annOf(c).map(a=>roc(a['發言日期'])+' '+a['主旨'])}})};
  try{const r=await fetch(S.worker.replace(/\/$/,'')+'/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts})});const j=await r.json();
  aiText=j.text?('【AI 整理／推論，非投資建議，請對照原始來源】\n'+j.text):('AI 無法使用：'+(j.error||r.status))}catch(e){aiText='AI 無法使用：'+e.message}
