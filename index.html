@@ -26,8 +26,10 @@ label{display:block;padding:4px 0}
 </style></head><body><div class="w" id="app"></div>
 <script>
 const api=()=>S.worker?S.worker.replace(/\/$/,'')+'/twse/':'https://openapi.twse.com.tw/v1/';
+const WORKER_URL='https://lively-paper-611dmorning-brief.isa05112317.workers.dev';
 const DEF={worker:'',theme:'dark',color:'tw',watch:['2330','2317'],links:[],sec:{taiex:1,watch:1,news:1,risk:1}};
 let S=Object.assign({},DEF,JSON.parse(localStorage.getItem('tm')||'{}'));
+S.worker=S.worker||WORKER_URL;
 let D={},tab='home',open=null,status='尚未更新',last='';
 const save=()=>localStorage.setItem('tm',JSON.stringify(S));
 const $=s=>document.getElementById(s);
@@ -111,7 +113,7 @@ function settings(){
  <div class="card"><h2>資料接通狀態</h2>${st.map(x=>`<div class="row"><div>${x[0]}</div><div class="${x[1]=='已接真實資料'?'':'err'}">${x[1]} <span class="mu">${x[2]}</span></div></div>`).join('')}</div>
  <div class="card"><h2>快捷連結</h2><div class="mu">僅供點擊開啟，不會自動抓取內容。</div>${S.links.map((l,i)=>`<div class="row"><a href="${esc(l.u)}" target="_blank" rel="noopener">${esc(l.n)}</a><button onclick="S.links.splice(${i},1);save();draw()">刪除</button></div>`).join('')}
  <form onsubmit="event.preventDefault();addL()" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input id="ln" placeholder="網站名稱"><input id="lu" placeholder="https://..."><button>新增</button></form></div>
- <div class="card"><h2>進階：Worker 網址（選填）</h2><div class="mu">填入後，台股資料改由你的 Worker 轉接，並可使用 AI 整理。</div><input id="wk" value="${esc(S.worker)}" placeholder="https://xxx.workers.dev" style="width:100%;margin-top:8px"><button onclick="S.worker=$('wk').value.trim();save();alert('已儲存')" style="margin-top:8px">儲存</button></div>
+ <div class="card"><h2>進階：資料轉接網址</h2><div class="mu">預設已連接內建的資料轉接服務，一般不需要修改。想改用自己的 Worker 才需要更換。</div><input id="wk" value="${esc(S.worker)}" placeholder="https://xxx.workers.dev" style="width:100%;margin-top:8px"><button onclick="S.worker=$('wk').value.trim();save();alert('已儲存')" style="margin-top:8px">儲存</button></div>
  <div class="card"><button onclick="if(confirm('確定重設所有設定與自選股？')){localStorage.removeItem('tm');location.reload()}">重設全部設定</button></div>`}
 function addL(){const n=$('ln').value.trim(),u=$('lu').value.trim();if(n&&/^https?:\/\//.test(u)){S.links.push({n,u});save();draw()}}
 let aiText='';
