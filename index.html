@@ -2,6 +2,7 @@
 <html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>投資晨報</title>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0b0d10"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="投資晨報">
 <style>
 :root{--bg:#0b0d10;--card:#14181d;--bd:#232a33;--tx:#e8ecf1;--mu:#8a96a6;--ac:#10a37f;--up:#ef4444;--dn:#22c55e}
 :root[data-t=light]{--bg:#f6f7f9;--card:#fff;--bd:#e3e6ea;--tx:#14181d;--mu:#667085}
@@ -24,8 +25,8 @@ button{cursor:pointer;min-height:40px}button.p{background:var(--ac);border-color
 label{display:block;padding:4px 0}
 </style></head><body><div class="w" id="app"></div>
 <script>
-const API='https://openapi.twse.com.tw/v1/';
-const DEF={theme:'dark',color:'tw',watch:['2330','2317'],links:[],sec:{taiex:1,watch:1,news:1,risk:1}};
+const api=()=>S.worker?S.worker.replace(/\/$/,'')+'/twse/':'https://openapi.twse.com.tw/v1/';
+const DEF={worker:'',theme:'dark',color:'tw',watch:['2330','2317'],links:[],sec:{taiex:1,watch:1,news:1,risk:1}};
 let S=Object.assign({},DEF,JSON.parse(localStorage.getItem('tm')||'{}'));
 let D={},tab='home',open=null,status='尚未更新',last='';
 const save=()=>localStorage.setItem('tm',JSON.stringify(S));
@@ -36,7 +37,7 @@ const roc=s=>{s=String(s||'');return s.length>=7?`${+s.slice(0,3)+1911}-${s.slic
 function cls(v){const u=S.color=='tw'?['up','dn']:['dn','up'];return v>0?u[0]:v<0?u[1]:'fl'}
 const arrow=v=>v>0?'▲':v<0?'▼':'—';
 function chg(c,p){return `<span class="${cls(c)}">${arrow(c)} ${c>0?'+':''}${c.toFixed(2)} (${p>0?'+':''}${p.toFixed(2)}%)</span>`}
-async function get(name,path){try{const r=await fetch(API+path);if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(!Array.isArray(j)||!j.length)throw Error('回傳空資料');D[name]={ok:1,data:j,t:new Date().toLocaleString('zh-TW')}}catch(e){D[name]={ok:0,err:e.message,t:D[name]?.t}}}
+async function get(name,path){try{const r=await fetch(api()+path);if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(!Array.isArray(j)||!j.length)throw Error('回傳空資料');D[name]={ok:1,data:j,t:new Date().toLocaleString('zh-TW')}}catch(e){D[name]={ok:0,err:e.message,t:D[name]?.t}}}
 async function refresh(){
  status='更新中…';draw();
  await Promise.all([get('fm','exchangeReport/FMTQIK'),get('px','exchangeReport/STOCK_DAY_ALL'),get('rev','opendata/t187ap05_L'),get('ann','opendata/t187ap04_L')]);
@@ -81,7 +82,7 @@ function highlights(){
  return L.length?L.map(x=>`<div class="row"><div><b>${x[0]}</b><div class="mu">${x[1]}</div></div></div>`).join('')+'<div class="mu">以上為程式依已取得資料整理，非 AI 推論。</div>':'<div class="mu">資料不足，尚無法整理重點。</div>'}
 function risks(){
  const L=[];S.watch.forEach(c=>{const r=revOf(c);if(r){const y=num(r['營業收入-去年同月增減(%)']);if(y<0)L.push(`${c} ${r['公司名稱']} 最新月營收年減 ${y}%，建議查看原始公告`)}});
- return '<h2>風險與待確認事項</h2>'+(L.length?L.map(x=>`<div>• ${esc(x)}</div>`).join('')+'<div class="mu">依固定規則（營收年減）由程式產生。</div>':'<div class="mu">目前無觸發規則的項目。</div>')+'<div class="err" style="margin-top:6px">AI 摘要：尚未啟用。</div>'}
+ return '<h2>風險與待確認事項</h2>'+(L.length?L.map(x=>`<div>• ${esc(x)}</div>`).join('')+'<div class="mu">依固定規則（營收年減）由程式產生。</div>':'<div class="mu">目前無觸發規則的項目。</div>')+aiBox()}
 function home(){
  const d=new Date(),wd='日一二三四五六'[d.getDay()];
  let h=`<div class="top"><div><h1>投資晨報</h1><div class="mu">${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${wd}｜最後更新：${last||'尚未更新'}</div><div class="mu">狀態：${status}</div></div><button class="p" onclick="refresh()">${last?'更新晨報':'產生今日晨報'}</button></div>`;
@@ -104,14 +105,26 @@ function addW(){
  S.watch.push(r.Code);save();draw()}
 window.mv=(i,d)=>{const j=i+d;if(j<0||j>=S.watch.length)return;[S.watch[i],S.watch[j]]=[S.watch[j],S.watch[i]];save();draw()};
 function settings(){
- const st=[['台股大盤','已接真實資料','證交所 FMTQIK'],['自選股股價','已接真實資料','證交所 STOCK_DAY_ALL'],['月營收','已接真實資料','OpenData t187ap05_L'],['公司公告','已接真實資料','OpenData t187ap04_L'],['季財報','尚未支援',''],['美股/國際市場','尚未支援',''],['法人籌碼、技術面、除權息','尚未支援',''],['新聞、行事曆','尚未支援',''],['AI 摘要','尚未啟用','需後端與 API 金鑰']];
+ const st=[['台股大盤','已接真實資料','證交所 FMTQIK'],['自選股股價','已接真實資料','證交所 STOCK_DAY_ALL'],['月營收','已接真實資料','OpenData t187ap05_L'],['公司公告','已接真實資料','OpenData t187ap04_L'],['季財報','尚未支援',''],['美股/國際市場','尚未支援',''],['法人籌碼、技術面、除權息','尚未支援',''],['新聞、行事曆','尚未支援',''],['AI 摘要',S.worker?'已連接 Worker':'尚未啟用','Worker＋Gemini 金鑰']];
  return `<div class="card"><h2>外觀</h2><button onclick="S.theme=S.theme=='dark'?'light':'dark';save();draw()">切換深／淺色</button> <button onclick="S.color=S.color=='tw'?'us':'tw';save();draw()">漲跌配色：${S.color=='tw'?'紅漲綠跌（台股）':'綠漲紅跌（美股）'}</button></div>
  <div class="card"><h2>晨報區塊</h2>${[['taiex','大盤與國際市場'],['watch','自選股概覽'],['news','新聞與行事曆'],['risk','風險與待確認']].map(x=>`<label><input type="checkbox" ${S.sec[x[0]]?'checked':''} onchange="S.sec['${x[0]}']=this.checked?1:0;save()"> ${x[1]}</label>`).join('')}</div>
  <div class="card"><h2>資料接通狀態</h2>${st.map(x=>`<div class="row"><div>${x[0]}</div><div class="${x[1]=='已接真實資料'?'':'err'}">${x[1]} <span class="mu">${x[2]}</span></div></div>`).join('')}</div>
  <div class="card"><h2>快捷連結</h2><div class="mu">僅供點擊開啟，不會自動抓取內容。</div>${S.links.map((l,i)=>`<div class="row"><a href="${esc(l.u)}" target="_blank" rel="noopener">${esc(l.n)}</a><button onclick="S.links.splice(${i},1);save();draw()">刪除</button></div>`).join('')}
  <form onsubmit="event.preventDefault();addL()" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input id="ln" placeholder="網站名稱"><input id="lu" placeholder="https://..."><button>新增</button></form></div>
+ <div class="card"><h2>進階：Worker 網址（選填）</h2><div class="mu">填入後，台股資料改由你的 Worker 轉接，並可使用 AI 整理。</div><input id="wk" value="${esc(S.worker)}" placeholder="https://xxx.workers.dev" style="width:100%;margin-top:8px"><button onclick="S.worker=$('wk').value.trim();save();alert('已儲存')" style="margin-top:8px">儲存</button></div>
  <div class="card"><button onclick="if(confirm('確定重設所有設定與自選股？')){localStorage.removeItem('tm');location.reload()}">重設全部設定</button></div>`}
 function addL(){const n=$('ln').value.trim(),u=$('lu').value.trim();if(n&&/^https?:\/\//.test(u)){S.links.push({n,u});save();draw()}}
+let aiText='';
+function aiBox(){return '<div style="margin-top:10px"><button onclick="askAI()">AI 整理重點</button>'+(S.worker?'':' <span class="err">尚未啟用：請到設定頁填入 Worker 網址</span>')+'<div style="white-space:pre-wrap;margin-top:8px">'+esc(aiText)+'</div></div>'}
+async function askAI(){
+ if(!S.worker){tab='set';draw();return}
+ if(!D.fm?.ok&&!D.px?.ok){aiText='請先產生晨報取得資料。';draw();return}
+ aiText='AI 整理中…';draw();
+ const facts={taiex:D.fm?.ok?(()=>{const r=D.fm.data.at(-1);return{date:roc(r.Date),close:num(r.TAIEX),change:num(r.Change)}})():null,
+ watch:S.watch.map(c=>{const p=px(c),rv=revOf(c);return{code:c,name:p?.name,close:p?.cl,change:p?.c,pct:p?+p.p.toFixed(2):null,revenue:rv?{month:roc(rv['資料年月']),mom_pct:rv['營業收入-上月比較增減(%)'],yoy_pct:rv['營業收入-去年同月增減(%)']}:null,announcements:annOf(c).map(a=>roc(a['發言日期'])+' '+a['主旨'])}})};
+ try{const r=await fetch(S.worker.replace(/\/$/,'')+'/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({facts})});const j=await r.json();
+ aiText=j.text?('【AI 整理／推論，非投資建議，請對照原始來源】\n'+j.text):('AI 無法使用：'+(j.error||r.status))}catch(e){aiText='AI 無法使用：'+e.message}
+ draw()}
 function draw(){
  document.documentElement.dataset.t=S.theme;
  $('app').innerHTML=(tab=='home'?home():tab=='watch'?watchPage():settings()).replace(/^/,'')+'';
@@ -120,4 +133,5 @@ function draw(){
  $('app').insertBefore(t,$('app').firstChild);
  $('app').insertAdjacentHTML('beforeend','<p class="mu">本工具僅整理公開資料，不構成投資建議。資料可能延遲或有誤，請以原始來源為準。</p>')}
 draw();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script></body></html>
